@@ -74,7 +74,6 @@ sudo apt-get install git
 git config --global user.email "youremail@domain.com"
 git config --global user.name "Your Name"
 ```
-Do I need this? https://learn.microsoft.com/en-us/windows/wsl/tutorials/wsl-git#git-credential-manager-setup
 
 ### Commands to check and set up GCM for WSL
 ```bash
@@ -94,3 +93,32 @@ git config --global credential.https://dev.azure.com.useHttpPath true
 [Some common .gitignore configurations](https://gist.github.com/octocat/9257657)
 
 ## 4. Docker Setup
+
+## 5. Set up a database
+
+## 6. Set up GPU acceleration for faster performance
+
+## 7. Basic WSL commands
+
+## 8. Mount an external drive or USB
+
+## 9. Run Linux GUI apps
+
+# Azure DevOps Integration: Agile Software Development
+Think of Agile as a way of working where teams deliver value in small, frequent increments, continuously improving as they go
+
+## The Agile Workflow
+
+### 1. Sprint Planning (start of sprint)
+The team decides:
+- What work to bring into the next 1–2 week sprint
+- How the work will be done
+- Who will take what tasks
+
+### 2. Daily Standup (every morning)
+You answer three things:
+- What you did yesterday
+- What you’re doing today
+- If anything is blocking you
+
+*Tip: Keep answers short — 30 seconds is ideal*
