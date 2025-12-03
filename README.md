@@ -122,3 +122,22 @@ You answer three things:
 - If anything is blocking you
 
 *Tip: Keep answers short — 30 seconds is ideal*
+
+### 3. Work, collaborate, push code (during the sprint)
+You’ll:
+- Pick up tasks from Azure Boards
+- Create branches in Repos
+- Run pipelines, make PRs
+
+*Tip: Ask questions quickly rather than getting stuck*
+
+### 4. Sprint Review (end of sprint)
+The team shows what they built to stakeholders
+
+### 5. Sprint Retrospective
+The team discusses:
+- What went well
+- What didn’t
+- What to improve next sprint
+
+This cycle repeats
