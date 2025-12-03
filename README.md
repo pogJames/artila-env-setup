@@ -141,3 +141,32 @@ The team discusses:
 - What to improve next sprint
 
 This cycle repeats
+
+## Work Item Terminology You MUST Know
+These terms are used constantly in conversation, tickets, and meetings
+1. Epic: A big chunk of work — too large for one sprint
+>Example: "User authentication system"
+2. Feature: A slice of an epic — still big but more specific
+>Example: "Email login", "Social login"
+3. User Story: A small, user-centric requirement
+>Format: As a user, I want X so that Y
+>Example:"As a user, I want to reset my password so that I can log in if I forget it"
+4. Task: Concrete steps developers/testers do to deliver a story
+>Example: "Create API endpoint", "Write unit tests", etc
+
+## Actual Workflow
+This is how work moves from idea → code → deploy.
+1. Product Owner adds items to the Product Backlog
+2. Team selects what to do this sprint (Sprint Backlog)
+3. You take a task → create a branch → write code
+4. Push changes → pipeline runs
+5. Create a pull request → team reviews
+6. Merge once approved
+7. Deployment pipeline handles release
+8. Move your story/task to Done
+
+## Agile Values
+1. **Individuals & interactions** over processes & tools
+2. **Working software** over comprehensive documentation
+3. **Customer collaboration** over contract negotiation
+4. **Responding to change** over following a plan
