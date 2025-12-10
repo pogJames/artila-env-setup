@@ -16,37 +16,24 @@ Make the class responsible for creating and managing its single instance.
 ```python
 class DatabaseConnection:
     _instance = None
-    _initialized = False
     
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
+            cls._instance.host = "localhost"
+            cls._instance.port = 5432
         return cls._instance
     
-    def __init__(self):
-        # Only initialize once
-        if not DatabaseConnection._initialized:
-            self.host = "localhost"
-            self.port = 5432
-            self.connection = None
-            DatabaseConnection._initialized = True
-            print("Database connection created")
-    
     def connect(self):
-        if not self.connection:
-            self.connection = f"Connected to {self.host}:{self.port}"
-        return self.connection
-    
-    def query(self, sql):
-        return f"Executing: {sql}"
+        return f"Connected to {self.host}:{self.port}"
 
 # Usage - always returns same instance
-db1 = DatabaseConnection()  # "Database connection created"
-db2 = DatabaseConnection()  # (no message - same instance)
+db1 = DatabaseConnection()
+db2 = DatabaseConnection()
 
 print(db1 is db2)  # True
 db1.host = "192.168.1.100"
-print(db2.host)    # "192.168.1.100" - same object
+print(db2.host)    # "192.168.1.100"
 ```
 
 #### Rust
@@ -56,7 +43,6 @@ use std::sync::{Arc, Mutex, Once};
 struct DatabaseConnection {
     host: String,
     port: u16,
-    connection: Option<String>,
 }
 
 impl DatabaseConnection {
@@ -69,24 +55,15 @@ impl DatabaseConnection {
                 let connection = DatabaseConnection {
                     host: "localhost".into(),
                     port: 5432,
-                    connection: None,
                 };
                 INSTANCE = Some(Arc::new(Mutex::new(connection)));
-                println!("Database connection created");
             });
             INSTANCE.clone().unwrap()
         }
     }
     
-    fn connect(&mut self) -> String {
-        if self.connection.is_none() {
-            self.connection = Some(format!("Connected to {}:{}", self.host, self.port));
-        }
-        self.connection.clone().unwrap()
-    }
-    
-    fn query(&self, sql: &str) -> String {
-        format!("Executing: {}", sql)
+    fn connect(&self) -> String {
+        format!("Connected to {}:{}", self.host, self.port)
     }
 }
 
@@ -94,21 +71,20 @@ impl DatabaseConnection {
 let db1 = DatabaseConnection::instance();
 let db2 = DatabaseConnection::instance();
 
-// Same instance (same Arc pointer)
 db1.lock().unwrap().host = "192.168.1.100".into();
 println!("{}", db2.lock().unwrap().host);  // "192.168.1.100"
 ```
 
-### Common Use Cases
+### Usage
 **General:**
 - Application configuration ensuring one settings object across the system
 - Logging where all parts write to the same log
 - Cache management with a single shared storage
 
-**IoT/ML:**
-- Hardware bus controllers since only one process can control I2C or SPI at a time
-- Model registry providing centralized access to loaded models
-- Telemetry aggregation collecting metrics from all device components
+**IoT:**
+- Modbus Master per process since only one can control the bus at a time
+- Shared MQTT client pooling connections to avoid overhead
+- Hardware bus controllers where I2C or SPI needs exclusive access
 
 ---
 
@@ -140,10 +116,6 @@ class DatabaseSource(DataSource):
     def read(self):
         return "Reading from database..."
 
-class APISource(DataSource):
-    def read(self):
-        return "Reading from API..."
-
 # Factory
 class DataProcessor:
     def create_source(self, source_type: str) -> DataSource:
@@ -151,19 +123,12 @@ class DataProcessor:
             return FileSource()
         elif source_type == "db":
             return DatabaseSource()
-        elif source_type == "api":
-            return APISource()
         raise ValueError(f"Unknown source: {source_type}")
-    
-    def process(self, source_type: str):
-        source = self.create_source(source_type)
-        data = source.read()
-        return f"Processing: {data}"
 
 # Usage
 processor = DataProcessor()
-print(processor.process("file"))  # Processing: Reading from file...
-print(processor.process("api"))   # Processing: Reading from API...
+source = processor.create_source("file")
+data = source.read()
 ```
 
 #### Rust
@@ -174,59 +139,41 @@ trait DataSource {
 
 struct FileSource;
 impl DataSource for FileSource {
-    fn read(&self) -> String {
-        "Reading from file...".into()
-    }
+    fn read(&self) -> String { "Reading from file...".into() }
 }
 
 struct DatabaseSource;
 impl DataSource for DatabaseSource {
-    fn read(&self) -> String {
-        "Reading from database...".into()
-    }
-}
-
-struct APISource;
-impl DataSource for APISource {
-    fn read(&self) -> String {
-        "Reading from API...".into()
-    }
+    fn read(&self) -> String { "Reading from database...".into() }
 }
 
 struct DataProcessor;
-
 impl DataProcessor {
     fn create_source(&self, source_type: &str) -> Box<dyn DataSource> {
         match source_type {
             "file" => Box::new(FileSource),
             "db" => Box::new(DatabaseSource),
-            "api" => Box::new(APISource),
             _ => panic!("Unknown source"),
         }
-    }
-    
-    fn process(&self, source_type: &str) -> String {
-        let source = self.create_source(source_type);
-        format!("Processing: {}", source.read())
     }
 }
 
 // Usage
 let processor = DataProcessor;
-println!("{}", processor.process("file"));
-println!("{}", processor.process("api"));
+let source = processor.create_source("file");
+let data = source.read();
 ```
 
-### Common Use Cases
+### Usage
 **General:**
 - Payment processing where type depends on user choice at checkout
 - Document export when format is selected by user
 - Notification delivery based on user preferences
 
-**IoT/ML:**
-- Sensor drivers where hardware type is determined by configuration
-- Communication protocols selected based on network availability
-- ML model format decided by deployment environment
+**IoT:**
+- Sensor drivers where hardware type is determined by configuration file
+- Communication protocols selected at runtime based on network availability
+- Data formatters chosen by the receiving system's requirements
 
 ---
 
@@ -257,95 +204,65 @@ class Checkbox(ABC):
 
 # Windows family
 class WindowsButton(Button):
-    def render(self):
-        return "Rendering Windows button"
+    def render(self): return "Windows button"
 
 class WindowsCheckbox(Checkbox):
-    def render(self):
-        return "Rendering Windows checkbox"
+    def render(self): return "Windows checkbox"
 
 # Mac family
 class MacButton(Button):
-    def render(self):
-        return "Rendering Mac button"
+    def render(self): return "Mac button"
 
 class MacCheckbox(Checkbox):
-    def render(self):
-        return "Rendering Mac checkbox"
+    def render(self): return "Mac checkbox"
 
 # Abstract factory
 class GUIFactory(ABC):
     @abstractmethod
     def create_button(self) -> Button: pass
-    
     @abstractmethod
     def create_checkbox(self) -> Checkbox: pass
 
 # Concrete factories
 class WindowsFactory(GUIFactory):
-    def create_button(self):
-        return WindowsButton()
-    
-    def create_checkbox(self):
-        return WindowsCheckbox()
+    def create_button(self): return WindowsButton()
+    def create_checkbox(self): return WindowsCheckbox()
 
 class MacFactory(GUIFactory):
-    def create_button(self):
-        return MacButton()
-    
-    def create_checkbox(self):
-        return MacCheckbox()
+    def create_button(self): return MacButton()
+    def create_checkbox(self): return MacCheckbox()
 
 # Usage
-def render_ui(factory: GUIFactory):
-    button = factory.create_button()
-    checkbox = factory.create_checkbox()
-    print(button.render())
-    print(checkbox.render())
-
-# All components match
-factory = WindowsFactory()  # or MacFactory()
-render_ui(factory)
+factory = WindowsFactory()
+button = factory.create_button()
+checkbox = factory.create_checkbox()
 ```
 
 #### Rust
 ```rust
-trait Button {
-    fn render(&self) -> String;
-}
-
-trait Checkbox {
-    fn render(&self) -> String;
-}
+trait Button { fn render(&self) -> String; }
+trait Checkbox { fn render(&self) -> String; }
 
 // Windows family
 struct WindowsButton;
 impl Button for WindowsButton {
-    fn render(&self) -> String {
-        "Rendering Windows button".into()
-    }
+    fn render(&self) -> String { "Windows button".into() }
 }
 
 struct WindowsCheckbox;
 impl Checkbox for WindowsCheckbox {
-    fn render(&self) -> String {
-        "Rendering Windows checkbox".into()
-    }
+    fn render(&self) -> String { "Windows checkbox".into() }
 }
 
 // Mac family
 struct MacButton;
 impl Button for MacButton {
-    fn render(&self) -> String {
-        "Rendering Mac button".into()
-    }
+    fn render(&self) -> String { "Mac button".into() }
 }
 
 struct MacCheckbox;
 impl Checkbox for MacCheckbox {
-    fn render(&self) -> String {
-        "Rendering Mac checkbox".into()
-    }
+    fn render(&self) -> String { "Mac checkbox".into() }
 }
 
 // Abstract factory
@@ -357,46 +274,26 @@ trait GUIFactory {
 // Concrete factories
 struct WindowsFactory;
 impl GUIFactory for WindowsFactory {
-    fn create_button(&self) -> Box<dyn Button> {
-        Box::new(WindowsButton)
-    }
-    fn create_checkbox(&self) -> Box<dyn Checkbox> {
-        Box::new(WindowsCheckbox)
-    }
-}
-
-struct MacFactory;
-impl GUIFactory for MacFactory {
-    fn create_button(&self) -> Box<dyn Button> {
-        Box::new(MacButton)
-    }
-    fn create_checkbox(&self) -> Box<dyn Checkbox> {
-        Box::new(MacCheckbox)
-    }
+    fn create_button(&self) -> Box<dyn Button> { Box::new(WindowsButton) }
+    fn create_checkbox(&self) -> Box<dyn Checkbox> { Box::new(WindowsCheckbox) }
 }
 
 // Usage
-fn render_ui(factory: &dyn GUIFactory) {
-    let button = factory.create_button();
-    let checkbox = factory.create_checkbox();
-    println!("{}", button.render());
-    println!("{}", checkbox.render());
-}
-
 let factory: &dyn GUIFactory = &WindowsFactory;
-render_ui(factory);
+let button = factory.create_button();
+let checkbox = factory.create_checkbox();
 ```
 
-### Common Use Cases
+### Usage
 **General:**
 - UI themes where all components must match visual style
 - Cross-platform apps where widgets adapt to the operating system
 - Database access where connection, commands, and transactions belong to the same vendor
 
-**IoT/ML:**
-- Protocol stacks ensuring client and server use the same communication standard
-- Cloud service abstraction where storage and compute come from one provider
-- ML training pipelines where data loader, model, and optimizer work together
+**IoT:**
+- Modbus RTU vs TCP families ensuring client and server use matching protocol
+- Cloud service sets where storage and messaging come from one provider
+- Sensor ecosystems where reader, calibrator, and logger work with the same data format
 
 ---
 
@@ -419,12 +316,7 @@ class HttpRequest:
         self.method = "GET"
         self.url = ""
         self.headers = {}
-        self.body = None
         self.timeout = 30
-        self.retries = 3
-    
-    def __repr__(self):
-        return f"Request({self.method} {self.url})"
 
 class HttpRequestBuilder:
     def __init__(self):
@@ -442,16 +334,8 @@ class HttpRequestBuilder:
         self._request.headers[key] = value
         return self
     
-    def body(self, body: str):
-        self._request.body = body
-        return self
-    
     def timeout(self, seconds: int):
         self._request.timeout = seconds
-        return self
-    
-    def retries(self, count: int):
-        self._request.retries = count
         return self
     
     def build(self) -> HttpRequest:
@@ -462,12 +346,8 @@ request = (HttpRequestBuilder()
            .method("POST")
            .url("https://api.example.com/data")
            .header("Content-Type", "application/json")
-           .header("Authorization", "Bearer token123")
-           .body('{"temp": 25.5}')
            .timeout(10)
            .build())
-
-print(request)  # Request(POST https://api.example.com/data)
 ```
 
 #### Rust
@@ -477,9 +357,7 @@ struct HttpRequest {
     method: String,
     url: String,
     headers: std::collections::HashMap<String, String>,
-    body: Option<String>,
     timeout: u32,
-    retries: u8,
 }
 
 struct HttpRequestBuilder {
@@ -492,7 +370,6 @@ impl HttpRequestBuilder {
             request: HttpRequest {
                 method: "GET".into(),
                 timeout: 30,
-                retries: 3,
                 ..Default::default()
             }
         }
@@ -513,18 +390,8 @@ impl HttpRequestBuilder {
         self
     }
     
-    fn body(mut self, body: &str) -> Self {
-        self.request.body = Some(body.into());
-        self
-    }
-    
     fn timeout(mut self, seconds: u32) -> Self {
         self.request.timeout = seconds;
-        self
-    }
-    
-    fn retries(mut self, count: u8) -> Self {
-        self.request.retries = count;
         self
     }
     
@@ -538,24 +405,20 @@ let request = HttpRequestBuilder::new()
     .method("POST")
     .url("https://api.example.com/data")
     .header("Content-Type", "application/json")
-    .header("Authorization", "Bearer token123")
-    .body(r#"{"temp": 25.5}"#)
     .timeout(10)
     .build();
-
-println!("{:?}", request);
 ```
 
-### Common Use Cases
+### Usage
 **General:**
 - Complex configuration objects avoiding constructors with many parameters
 - Query building where clauses are added conditionally
 - Test data creation with only relevant fields set
 
-**IoT/ML:**
-- Sensor setup defining pin, threshold, sampling rate, and filters step-by-step
-- Neural network construction adding layers, activations, and regularization progressively
-- Communication client configuration setting host, credentials, timeouts, and retry logic
+**IoT:**
+- Modbus connection setup defining slave ID, baud rate, timeout, and retry logic
+- Sensor configuration setting pin, threshold, sampling rate, and calibration values
+- MQTT client builder specifying broker, credentials, QoS, and keepalive settings
 
 ---
 
@@ -574,107 +437,78 @@ Clone existing objects instead of creating new ones.
 #### Python
 ```python
 from copy import deepcopy
-from dataclasses import dataclass, field
 
-@dataclass
-class MLModelConfig:
-    model_type: str
-    layers: list = field(default_factory=list)
-    learning_rate: float = 0.001
-    batch_size: int = 32
-    epochs: int = 100
-    optimizer_params: dict = field(default_factory=dict)
+class SensorConfig:
+    def __init__(self, pin, threshold):
+        self.pin = pin
+        self.threshold = threshold
+        self.calibration = []
     
     def clone(self):
-        """Deep copy this configuration"""
         return deepcopy(self)
 
-# Create base configuration
-base_config = MLModelConfig(
-    model_type="CNN",
-    layers=[64, 128, 256, 512],
-    learning_rate=0.001,
-    optimizer_params={"momentum": 0.9, "weight_decay": 0.0001}
-)
+# Usage
+base = SensorConfig(pin="A0", threshold=30)
+base.calibration = [1.0, 1.1, 0.9]
 
-# Clone and modify for experiments
-experiment1 = base_config.clone()
-experiment1.learning_rate = 0.01
-experiment1.batch_size = 64
+sensor1 = base.clone()
+sensor1.pin = "A1"
+sensor1.threshold = 25
 
-experiment2 = base_config.clone()
-experiment2.layers = [32, 64, 128]
-experiment2.learning_rate = 0.0001
+sensor2 = base.clone()
+sensor2.pin = "A2"
 
-experiment3 = base_config.clone()
-experiment3.optimizer_params["momentum"] = 0.95
-
-# Each is independent
-print(f"Base LR: {base_config.learning_rate}")      # 0.001
-print(f"Exp1 LR: {experiment1.learning_rate}")      # 0.01
-print(f"Exp2 layers: {experiment2.layers}")         # [32, 64, 128]
-print(f"Base momentum: {base_config.optimizer_params['momentum']}")  # 0.9
+# Independent copies
+sensor1.calibration.append(1.2)
+print(len(base.calibration))     # 3
+print(len(sensor1.calibration))  # 4
 ```
 
 #### Rust
 ```rust
 #[derive(Clone, Debug)]
-struct MLModelConfig {
-    model_type: String,
-    layers: Vec<u32>,
-    learning_rate: f32,
-    batch_size: u32,
-    epochs: u32,
-    optimizer_params: std::collections::HashMap<String, f32>,
+struct SensorConfig {
+    pin: String,
+    threshold: f32,
+    calibration: Vec<f32>,
 }
 
-impl MLModelConfig {
-    fn new(model_type: &str) -> Self {
+impl SensorConfig {
+    fn new(pin: &str, threshold: f32) -> Self {
         Self {
-            model_type: model_type.into(),
-            layers: Vec::new(),
-            learning_rate: 0.001,
-            batch_size: 32,
-            epochs: 100,
-            optimizer_params: std::collections::HashMap::new(),
+            pin: pin.into(),
+            threshold,
+            calibration: Vec::new(),
         }
     }
 }
 
 // Usage
-let mut base_config = MLModelConfig::new("CNN");
-base_config.layers = vec![64, 128, 256, 512];
-base_config.optimizer_params.insert("momentum".into(), 0.9);
-base_config.optimizer_params.insert("weight_decay".into(), 0.0001);
+let mut base = SensorConfig::new("A0", 30.0);
+base.calibration = vec![1.0, 1.1, 0.9];
 
-// Clone and modify
-let mut experiment1 = base_config.clone();
-experiment1.learning_rate = 0.01;
-experiment1.batch_size = 64;
+let mut sensor1 = base.clone();
+sensor1.pin = "A1".into();
+sensor1.threshold = 25.0;
 
-let mut experiment2 = base_config.clone();
-experiment2.layers = vec![32, 64, 128];
-experiment2.learning_rate = 0.0001;
+let sensor2 = base.clone();
 
-let mut experiment3 = base_config.clone();
-experiment3.optimizer_params.insert("momentum".into(), 0.95);
-
-// Each is independent
-println!("Base LR: {}", base_config.learning_rate);
-println!("Exp1 LR: {}", experiment1.learning_rate);
-println!("Exp2 layers: {:?}", experiment2.layers);
+// Independent copies
+sensor1.calibration.push(1.2);
+println!("{}", base.calibration.len());     // 3
+println!("{}", sensor1.calibration.len());  // 4
 ```
 
-### Common Use Cases
+### Usage
 **General:**
 - Game character creation by copying templates and customizing attributes
 - Document generation from templates with specific data filled in
 - Test fixtures where base objects are cloned for each test
 
-**IoT/ML:**
-- Multiple sensor instances starting from one base configuration
-- ML experiments varying one hyperparameter while keeping others constant
-- Network packet generation from a template structure
+**IoT:**
+- Multiple sensor configurations starting from one base setup
+- Modbus register maps copied and modified for different slave devices
+- Network packet templates cloned for batch transmission with varying payloads
 
 ---
 
