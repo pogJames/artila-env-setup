@@ -1,284 +1,14 @@
-# CREATIONAL PATTERNS
-
-## Singleton
-
-### Problem
-Ensures a class has only one instance (e.g., to manage shared resources like a database connection or configuration settings) while providing global access to it  
-> Without it, multiple instances could lead to inconsistencies or resource waste...  
-> Like a government, A country can have only one official government and everybody must talk to the same one
-
-### Solution
-The class controls its own instantiation:  
-- a private constructor  
-- a static variable to hold the single instance  
-- a static method to `get` the instance (creating it if needed)  
-> Thread-safety is often added for concurrent environments
-
-### Structure
-|Singleton|  
-|:---|  
-|- instance: Singleton|  
-|- Singleton()|  
-|+ getInstance(): Singleton|  
-```bash
-# getInstance()  
-if (instance == null) {  
-   instance = new Singleton()  
-}  
-return instance  
-```
-
-### Code Examples
-
-#### Python
-```python
-class Config:
-    _instance = None
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance.debug = False
-            cls._instance.name = "app"
-        return cls._instance
-
-# Usage
-cfg1 = Config()
-cfg2 = Config()
-cfg1.debug = True
-print(cfg2.debug)  # True - same instance
-```
-
-#### Rust
-```rust
-use once_cell::sync::Lazy;
-use std::sync::Mutex;
-
-static CONFIG: Lazy<Mutex<Config>> = Lazy::new(|| {
-    Mutex::new(Config { debug: false, name: "gateway".into() })
-});
-
-#[derive(Debug)]
-struct Config {
-    debug: bool,
-    name: String,
-}
-
-// Usage anywhere
-let mut cfg = CONFIG.lock().unwrap();
-cfg.debug = true;
-```
-
-### Usage
-**General**
-- Global logger
-- Configuration manager
-
-**Technical**
-- One Modbus Master per process
-- Shared MQTT client or cloud connection pool
-- Global device registry
-
----
-
-## Builder
-
-### Problem
-Constructing a complex object step by step. The classic constructor does not allow to construct different representations of the same class.  
-> Without it, you'd have telescoping constructors (many overloads with different param combinations) or setters that allow invalid states during construction.  
-> Like building a house: you need to add walls, roof, doors step-by-step, and different builders can make different styles (modern vs traditional) from the same process.
-
-### Solution
-Separate the construction of a complex object from its representation:  
-- A Builder interface with methods for each part (e.g., add_part_a(), add_part_b())  
-- Concrete Builders implement the interface for specific variations  
-- A Director (optional) to orchestrate the building steps for common recipes  
-- The final build() returns the product  
-> Allows fluent chaining, immutable products, and reuse of construction logic for different types.
-
-### Structure
-| Builder | ConcreteBuilder | Director | Product |
-|:---|:---|:---|:---|
-| + build_part_a() | - product | - builder | - part_a |
-| + build_part_b() | + build_part_a() | + construct() | - part_b |
-| + get_result() | + build_part_b() | | |
-
-```bash
-# construct()
-builder.build_part_a()
-builder.build_part_b()
-return builder.get_result()
-```
-
-### Code Examples
-
-#### Python
-```python
-class Request:
-    def __init__(self, host, port, timeout):
-        self.host = host
-        self.port = port
-        self.timeout = timeout
-
-class RequestBuilder:
-    def __init__(self):
-        self.host = "localhost"
-        self.port = 8080
-        self.timeout = 5000
-
-    def host(self, h):    self.host = h;    return self
-    def port(self, p):    self.port = p;    return self
-    def timeout(self, t): self.timeout = t; return self
-    def build(self):      return Request(self.host, self.port, self.timeout)
-
-# Usage
-req = RequestBuilder().host("api.com").port(443).timeout(2000).build()
-```
-
-#### Rust
-```rust
-#[derive(Debug)]
-struct Request { host: String, port: u16, timeout: u64 }
-
-struct RequestBuilder {
-    host: String, port: u16, timeout: u64,
-}
-
-impl RequestBuilder {
-    fn new() -> Self {
-        Self { host: "localhost".into(), port: 8080, timeout: 5000 }
-    }
-    fn host(mut self, h: &str) -> Self { self.host = h.into(); self }
-    fn port(mut self, p: u16) -> Self { self.port = p; self }
-    fn timeout(mut self, t: u64) -> Self { self.timeout = t; self }
-    fn build(self) -> Request { Request { host: self.host, port: self.port, timeout: self.timeout } }
-}
-
-// Usage
-let req = RequestBuilder::new()
-    .host("192.168.1.10")
-    .port(502)
-    .timeout(1000)
-    .build();
-```
-
-### Usage
-**General**
-- Complex immutable objects
-- API clients with many options
-
-**Technical**
-- Building Modbus requests
-- Configuring serial/TCP connections
-- Creating telemetry payloads
-
----
-
-## Prototype
-
-### Problem
-Creating an object is expensive or complex (e.g., involves database queries, file loading, or heavy computations), and you need many similar objects with minor variations.  
-> Without it, you'd repeat the costly creation process each time, leading to performance issues or code duplication.  
-> Like photocopying a form: instead of filling a new blank form from scratch every time, copy a pre-filled template and just change the name/date.
-
-### Solution
-Specify the kinds of objects to create using a prototypical instance, and create new objects by copying this prototype:  
-- Implement a clone() method that performs a deep copy of the object state  
-- Clients clone the prototype and customize the clone as needed  
-- Often uses a registry of prototypes for easy access by type  
-> Avoids subclasses for variations and reduces initialization overhead.
-
-### Structure
-| Prototype |
-|:---|
-| + clone(): Prototype |
-| - state |
-
-```bash
-# usage
-prototype = load_expensive_template()
-new_obj = prototype.clone()
-new_obj.modify_specific_fields()
-```
-
-### Code Examples
-
-#### Python
-```python
-import copy
-
-class Device:
-    def __init__(self):
-        self.id = 0
-        self.name = "sensor"
-        self.enabled = True
-
-    def clone(self):
-        return copy.deepcopy(self)
-
-# Template
-template = Device()
-
-dev1 = template.clone()
-dev1.id = 101
-
-dev2 = template.clone()
-dev2.id = 102
-```
-
-#### Rust
-```rust
-#[derive(Clone, Debug)]
-struct Device {
-    id: u32,
-    name: String,
-    enabled: bool,
-}
-
-// Template
-let template = Device { id: 0, name: "sensor".into(), enabled: true };
-
-let dev1 = template.clone();
-let dev2 = template.clone();
-```
-
-### Usage
-**General**
-- Expensive object creation
-- Template-based instances
-
-**Technical**
-- Provisioning many identical Modbus devices
-- Fast boot from pre-configured template
-- Test fixtures
-
----
+# Creational Design Patterns
 
 ## Factory Method
 
 ### Problem
-A class cannot anticipate the class of objects it must create, or subclasses may need to specify the objects they create, to keep code flexible and extensible.  
-> Without it, you'd hardcode concrete classes, violating open-closed principle and making changes difficult (e.g., swapping implementations requires editing client code).  
-> Like a car factory: the base factory defines how to assemble a car, but subclasses decide if it's a sedan, SUV, or truck.
+You need to create objects but don't know the exact type until runtime.
+> Hardcoding object creation makes code rigid—adding new types requires modifying existing code everywhere. Like ordering "a vehicle" without specifying car, truck, or motorcycle until delivery.
 
 ### Solution
-Define an interface for creating an object, but let subclasses decide which class to instantiate:  
-- Creator class declares the factory_method() that returns a Product interface  
-- ConcreteCreators override factory_method() to return specific ConcreteProducts  
-- Clients use the Creator without knowing the concrete types  
-> Promotes loose coupling and parallel class hierarchies (creators and products).
-
-### Structure
-| Creator | ConcreteCreator | Product | ConcreteProduct |
-|:---|:---|:---|:---|
-| + factory_method(): Product | + factory_method(): Product | + operation() | + operation() |
-
-```bash
-# usage
-creator = ConcreteCreator()
-product = creator.factory_method()
-product.operation()
-```
+Define an interface for creating objects, but let subclasses decide which class to instantiate.
+> The creator class works with the product interface, while concrete creators return specific implementations. Client code stays the same when new types are added.
 
 ### Code Examples
 
@@ -286,152 +16,684 @@ product.operation()
 ```python
 from abc import ABC, abstractmethod
 
-class Logger(ABC):
+class DataSource(ABC):
     @abstractmethod
-    def log(self, msg): pass
+    def read(self): pass
 
-class ConsoleLogger(Logger):
-    def log(self, msg): print(msg)
+class FileSource(DataSource):
+    def read(self):
+        return "Reading from file..."
 
-class FileLogger(Logger):
-    def log(self, msg): pass  # write to file
+class DatabaseSource(DataSource):
+    def read(self):
+        return "Reading from database..."
 
-class Application(ABC):
-    def create_logger(self): raise NotImplementedError
-    def start(self):
-        self.create_logger().log("started")
+class APISource(DataSource):
+    def read(self):
+        return "Reading from API..."
 
-class DevApp(Application):
-    def create_logger(self): return ConsoleLogger()
+# Factory
+class DataProcessor:
+    def create_source(self, source_type: str) -> DataSource:
+        if source_type == "file":
+            return FileSource()
+        elif source_type == "db":
+            return DatabaseSource()
+        elif source_type == "api":
+            return APISource()
+        raise ValueError(f"Unknown source: {source_type}")
+    
+    def process(self, source_type: str):
+        source = self.create_source(source_type)
+        data = source.read()
+        return f"Processing: {data}"
 
-class ProdApp(Application):
-    def create_logger(self): return FileLogger()
+# Usage
+processor = DataProcessor()
+print(processor.process("file"))  # Processing: Reading from file...
+print(processor.process("api"))   # Processing: Reading from API...
 ```
 
 #### Rust
 ```rust
-trait Logger { fn log(&self, msg: &str); }
-
-struct ConsoleLogger;
-struct FileLogger;
-
-impl Logger for ConsoleLogger { fn log(&self, msg: &str) { println!("{}", msg); } }
-impl Logger for FileLogger    { fn log(&self, _: &str) { /* file */ } }
-
-trait Application {
-    fn logger(&self) -> Box<dyn Logger>;
-    fn start(&self) { self.logger().log("App started"); }
+trait DataSource {
+    fn read(&self) -> String;
 }
 
-struct DevApp;
-struct ProdApp;
+struct FileSource;
+impl DataSource for FileSource {
+    fn read(&self) -> String {
+        "Reading from file...".into()
+    }
+}
 
-impl Application for DevApp  { fn logger(&self) -> Box<dyn Logger> { Box::new(ConsoleLogger) } }
-impl Application for ProdApp { fn logger(&self) -> Box<dyn Logger> { Box::new(FileLogger) } }
+struct DatabaseSource;
+impl DataSource for DatabaseSource {
+    fn read(&self) -> String {
+        "Reading from database...".into()
+    }
+}
+
+struct APISource;
+impl DataSource for APISource {
+    fn read(&self) -> String {
+        "Reading from API...".into()
+    }
+}
+
+struct DataProcessor;
+
+impl DataProcessor {
+    fn create_source(&self, source_type: &str) -> Box<dyn DataSource> {
+        match source_type {
+            "file" => Box::new(FileSource),
+            "db" => Box::new(DatabaseSource),
+            "api" => Box::new(APISource),
+            _ => panic!("Unknown source"),
+        }
+    }
+    
+    fn process(&self, source_type: &str) -> String {
+        let source = self.create_source(source_type);
+        format!("Processing: {}", source.read())
+    }
+}
+
+// Usage
+let processor = DataProcessor;
+println!("{}", processor.process("file"));
+println!("{}", processor.process("api"));
 ```
 
-### Usage
-**General**
-- Framework extension points
-- Runtime type selection
+### Common Use Cases
+**General:**
+- Payment processing where type depends on user choice at checkout
+- Document export when format is selected by user
+- Notification delivery based on user preferences
 
-**Technical**
-- Choose RTU vs TCP transport
-- Create correct parser per device type
-- Master vs Slave role
+**IoT/ML:**
+- Sensor drivers where hardware type is determined by configuration
+- Communication protocols selected based on network availability
+- ML model format decided by deployment environment
 
 ---
 
 ## Abstract Factory
 
 ### Problem
-System needs to create families of related or dependent objects without specifying their concrete classes, to ensure compatibility across products.  
-> Without it, client code would mix concrete classes from different families, leading to inconsistencies (e.g., Windows buttons with Mac checkboxes in a UI).  
-> Like a furniture store: one factory for Victorian style (chair + table + sofa), another for Modern style, ensuring all pieces match.
+You need to create families of related objects that must work together.
+> Creating incompatible combinations leads to errors. Like mixing furniture styles—a Windows button with Mac scrollbar looks wrong and may not work properly.
 
 ### Solution
-Provide an interface for creating families of related objects:  
-- AbstractFactory declares methods for each product type (create_product_a(), create_product_b())  
-- ConcreteFactories implement the methods to produce compatible ConcreteProducts  
-- Clients use the AbstractFactory interface, configurable at runtime  
-> Isolates concrete classes and allows swapping entire product families easily.
-
-### Structure
-| AbstractFactory | ConcreteFactory | AbstractProductA | ConcreteProductA1 | AbstractProductB | ConcreteProductB1 |
-|:---|:---|:---|:---|:---|:---|
-| + create_a(): AbstractProductA | + create_a(): AbstractProductA | + method_a() | + method_a() | + method_b() | + method_b() |
-| + create_b(): AbstractProductB | + create_b(): AbstractProductB | | | | |
-
-```bash
-# usage
-factory = ConcreteFactory()
-product_a = factory.create_a()
-product_b = factory.create_b()
-```
+Provide an interface for creating families of related objects.
+> Each concrete factory produces a complete set of compatible products. Switch factories to switch entire product families at once.
 
 ### Code Examples
 
 #### Python
 ```python
-class Button:  def render(self): pass
-class Checkbox: def check(self): pass
+from abc import ABC, abstractmethod
 
-class WinButton(Button):  def render(self): print("Win button")
-class WinCheckbox(Checkbox): def check(self): print("Win check")
-class MacButton(Button):  def render(self): print("Mac button")
-class MacCheckbox(Checkbox): def check(self): print("Mac check")
+# Abstract products
+class Button(ABC):
+    @abstractmethod
+    def render(self): pass
 
-class GUIFactory:
-    def create_button(self): raise NotImplementedError
-    def create_checkbox(self): raise NotImplementedError
+class Checkbox(ABC):
+    @abstractmethod
+    def render(self): pass
 
+# Windows family
+class WindowsButton(Button):
+    def render(self):
+        return "Rendering Windows button"
+
+class WindowsCheckbox(Checkbox):
+    def render(self):
+        return "Rendering Windows checkbox"
+
+# Mac family
+class MacButton(Button):
+    def render(self):
+        return "Rendering Mac button"
+
+class MacCheckbox(Checkbox):
+    def render(self):
+        return "Rendering Mac checkbox"
+
+# Abstract factory
+class GUIFactory(ABC):
+    @abstractmethod
+    def create_button(self) -> Button: pass
+    
+    @abstractmethod
+    def create_checkbox(self) -> Checkbox: pass
+
+# Concrete factories
 class WindowsFactory(GUIFactory):
-    def create_button(self): return WinButton()
-    def create_checkbox(self): return WinCheckbox()
+    def create_button(self):
+        return WindowsButton()
+    
+    def create_checkbox(self):
+        return WindowsCheckbox()
 
 class MacFactory(GUIFactory):
-    def create_button(self): return MacButton()
-    def create_checkbox(self): return MacCheckbox()
+    def create_button(self):
+        return MacButton()
+    
+    def create_checkbox(self):
+        return MacCheckbox()
+
+# Usage
+def render_ui(factory: GUIFactory):
+    button = factory.create_button()
+    checkbox = factory.create_checkbox()
+    print(button.render())
+    print(checkbox.render())
+
+# All components match
+factory = WindowsFactory()  # or MacFactory()
+render_ui(factory)
 ```
 
 #### Rust
 ```rust
-trait Button   { fn render(&self); }
-trait Checkbox { fn check(&self); }
-
-struct WinButton;   struct WinCheckbox;
-struct MacButton;   struct MacCheckbox;
-
-impl Button for WinButton { fn render(&self) { println!("Win button"); } }
-impl Button for MacButton { fn render(&self) { println!("Mac button"); } }
-impl Checkbox for WinCheckbox { fn check(&self) { println!("Win check"); } }
-impl Checkbox for MacCheckbox { fn check(&self) { println!("Mac check"); } }
-
-trait GuiFactory {
-    fn button(&self) -> Box<dyn Button>;
-    fn checkbox(&self) -> Box<dyn Checkbox>;
+trait Button {
+    fn render(&self) -> String;
 }
 
+trait Checkbox {
+    fn render(&self) -> String;
+}
+
+// Windows family
+struct WindowsButton;
+impl Button for WindowsButton {
+    fn render(&self) -> String {
+        "Rendering Windows button".into()
+    }
+}
+
+struct WindowsCheckbox;
+impl Checkbox for WindowsCheckbox {
+    fn render(&self) -> String {
+        "Rendering Windows checkbox".into()
+    }
+}
+
+// Mac family
+struct MacButton;
+impl Button for MacButton {
+    fn render(&self) -> String {
+        "Rendering Mac button".into()
+    }
+}
+
+struct MacCheckbox;
+impl Checkbox for MacCheckbox {
+    fn render(&self) -> String {
+        "Rendering Mac checkbox".into()
+    }
+}
+
+// Abstract factory
+trait GUIFactory {
+    fn create_button(&self) -> Box<dyn Button>;
+    fn create_checkbox(&self) -> Box<dyn Checkbox>;
+}
+
+// Concrete factories
 struct WindowsFactory;
+impl GUIFactory for WindowsFactory {
+    fn create_button(&self) -> Box<dyn Button> {
+        Box::new(WindowsButton)
+    }
+    fn create_checkbox(&self) -> Box<dyn Checkbox> {
+        Box::new(WindowsCheckbox)
+    }
+}
+
 struct MacFactory;
-
-impl GuiFactory for WindowsFactory {
-    fn button(&self) -> Box<dyn Button> { Box::new(WinButton) }
-    fn checkbox(&self) -> Box<dyn Checkbox> { Box::new(WinCheckbox) }
+impl GUIFactory for MacFactory {
+    fn create_button(&self) -> Box<dyn Button> {
+        Box::new(MacButton)
+    }
+    fn create_checkbox(&self) -> Box<dyn Checkbox> {
+        Box::new(MacCheckbox)
+    }
 }
 
-impl GuiFactory for MacFactory {
-    fn button(&self) -> Box<dyn Button> { Box::new(MacButton) }
-    fn checkbox(&self) -> Box<dyn Checkbox> { Box::new(MacCheckbox) }
+// Usage
+fn render_ui(factory: &dyn GUIFactory) {
+    let button = factory.create_button();
+    let checkbox = factory.create_checkbox();
+    println!("{}", button.render());
+    println!("{}", checkbox.render());
 }
+
+let factory: &dyn GUIFactory = &WindowsFactory;
+render_ui(factory);
 ```
 
-### Usage
-**General**
-- GUI themes
-- Cross-platform widgets
+### Common Use Cases
+**General:**
+- UI themes where all components must match visual style
+- Cross-platform apps where widgets adapt to the operating system
+- Database access where connection, commands, and transactions belong to the same vendor
 
-**Technical**
-- Vendor-specific device families (Schneider vs ABB)
-- Multi-protocol support
-- Test vs production drivers (mock vs real)
+**IoT/ML:**
+- Protocol stacks ensuring client and server use the same communication standard
+- Cloud service abstraction where storage and compute come from one provider
+- ML training pipelines where data loader, model, and optimizer work together
+
+---
+
+## Builder
+
+### Problem
+Creating complex objects with many optional parameters leads to unreadable constructors.
+> The telescoping constructor problem makes code hard to read and error-prone. Like ordering a custom sandwich—easier to say "add this, add that" than listing everything upfront.
+
+### Solution
+Construct objects step-by-step using a builder interface.
+> Build only what you need, in any order, with readable method chaining. Each method returns the builder for fluent interface.
+
+### Code Examples
+
+#### Python
+```python
+class HttpRequest:
+    def __init__(self):
+        self.method = "GET"
+        self.url = ""
+        self.headers = {}
+        self.body = None
+        self.timeout = 30
+        self.retries = 3
+    
+    def __repr__(self):
+        return f"Request({self.method} {self.url})"
+
+class HttpRequestBuilder:
+    def __init__(self):
+        self._request = HttpRequest()
+    
+    def method(self, method: str):
+        self._request.method = method
+        return self
+    
+    def url(self, url: str):
+        self._request.url = url
+        return self
+    
+    def header(self, key: str, value: str):
+        self._request.headers[key] = value
+        return self
+    
+    def body(self, body: str):
+        self._request.body = body
+        return self
+    
+    def timeout(self, seconds: int):
+        self._request.timeout = seconds
+        return self
+    
+    def retries(self, count: int):
+        self._request.retries = count
+        return self
+    
+    def build(self) -> HttpRequest:
+        return self._request
+
+# Usage - fluent interface
+request = (HttpRequestBuilder()
+           .method("POST")
+           .url("https://api.example.com/data")
+           .header("Content-Type", "application/json")
+           .header("Authorization", "Bearer token123")
+           .body('{"temp": 25.5}')
+           .timeout(10)
+           .build())
+
+print(request)  # Request(POST https://api.example.com/data)
+```
+
+#### Rust
+```rust
+#[derive(Debug, Default)]
+struct HttpRequest {
+    method: String,
+    url: String,
+    headers: std::collections::HashMap<String, String>,
+    body: Option<String>,
+    timeout: u32,
+    retries: u8,
+}
+
+struct HttpRequestBuilder {
+    request: HttpRequest,
+}
+
+impl HttpRequestBuilder {
+    fn new() -> Self {
+        Self {
+            request: HttpRequest {
+                method: "GET".into(),
+                timeout: 30,
+                retries: 3,
+                ..Default::default()
+            }
+        }
+    }
+    
+    fn method(mut self, method: &str) -> Self {
+        self.request.method = method.into();
+        self
+    }
+    
+    fn url(mut self, url: &str) -> Self {
+        self.request.url = url.into();
+        self
+    }
+    
+    fn header(mut self, key: &str, value: &str) -> Self {
+        self.request.headers.insert(key.into(), value.into());
+        self
+    }
+    
+    fn body(mut self, body: &str) -> Self {
+        self.request.body = Some(body.into());
+        self
+    }
+    
+    fn timeout(mut self, seconds: u32) -> Self {
+        self.request.timeout = seconds;
+        self
+    }
+    
+    fn retries(mut self, count: u8) -> Self {
+        self.request.retries = count;
+        self
+    }
+    
+    fn build(self) -> HttpRequest {
+        self.request
+    }
+}
+
+// Usage
+let request = HttpRequestBuilder::new()
+    .method("POST")
+    .url("https://api.example.com/data")
+    .header("Content-Type", "application/json")
+    .header("Authorization", "Bearer token123")
+    .body(r#"{"temp": 25.5}"#)
+    .timeout(10)
+    .build();
+
+println!("{:?}", request);
+```
+
+### Common Use Cases
+**General:**
+- Complex configuration objects avoiding constructors with many parameters
+- Query building where clauses are added conditionally
+- Test data creation with only relevant fields set
+
+**IoT/ML:**
+- Sensor setup defining pin, threshold, sampling rate, and filters step-by-step
+- Neural network construction adding layers, activations, and regularization progressively
+- Communication client configuration setting host, credentials, timeouts, and retry logic
+
+---
+
+## Prototype
+
+### Problem
+Creating new objects from scratch is expensive when initialization is complex.
+> Recreating objects with database queries, file loading, or heavy computation wastes resources. Like photocopying—faster to copy than retype the entire document.
+
+### Solution
+Clone existing objects instead of creating new ones.
+> Objects implement their own cloning logic, including deep copies of internal state. Modify the clone without affecting the original.
+
+### Code Examples
+
+#### Python
+```python
+from copy import deepcopy
+from dataclasses import dataclass, field
+
+@dataclass
+class MLModelConfig:
+    model_type: str
+    layers: list = field(default_factory=list)
+    learning_rate: float = 0.001
+    batch_size: int = 32
+    epochs: int = 100
+    optimizer_params: dict = field(default_factory=dict)
+    
+    def clone(self):
+        """Deep copy this configuration"""
+        return deepcopy(self)
+
+# Create base configuration
+base_config = MLModelConfig(
+    model_type="CNN",
+    layers=[64, 128, 256, 512],
+    learning_rate=0.001,
+    optimizer_params={"momentum": 0.9, "weight_decay": 0.0001}
+)
+
+# Clone and modify for experiments
+experiment1 = base_config.clone()
+experiment1.learning_rate = 0.01
+experiment1.batch_size = 64
+
+experiment2 = base_config.clone()
+experiment2.layers = [32, 64, 128]
+experiment2.learning_rate = 0.0001
+
+experiment3 = base_config.clone()
+experiment3.optimizer_params["momentum"] = 0.95
+
+# Each is independent
+print(f"Base LR: {base_config.learning_rate}")      # 0.001
+print(f"Exp1 LR: {experiment1.learning_rate}")      # 0.01
+print(f"Exp2 layers: {experiment2.layers}")         # [32, 64, 128]
+print(f"Base momentum: {base_config.optimizer_params['momentum']}")  # 0.9
+```
+
+#### Rust
+```rust
+#[derive(Clone, Debug)]
+struct MLModelConfig {
+    model_type: String,
+    layers: Vec<u32>,
+    learning_rate: f32,
+    batch_size: u32,
+    epochs: u32,
+    optimizer_params: std::collections::HashMap<String, f32>,
+}
+
+impl MLModelConfig {
+    fn new(model_type: &str) -> Self {
+        Self {
+            model_type: model_type.into(),
+            layers: Vec::new(),
+            learning_rate: 0.001,
+            batch_size: 32,
+            epochs: 100,
+            optimizer_params: std::collections::HashMap::new(),
+        }
+    }
+}
+
+// Usage
+let mut base_config = MLModelConfig::new("CNN");
+base_config.layers = vec![64, 128, 256, 512];
+base_config.optimizer_params.insert("momentum".into(), 0.9);
+base_config.optimizer_params.insert("weight_decay".into(), 0.0001);
+
+// Clone and modify
+let mut experiment1 = base_config.clone();
+experiment1.learning_rate = 0.01;
+experiment1.batch_size = 64;
+
+let mut experiment2 = base_config.clone();
+experiment2.layers = vec![32, 64, 128];
+experiment2.learning_rate = 0.0001;
+
+let mut experiment3 = base_config.clone();
+experiment3.optimizer_params.insert("momentum".into(), 0.95);
+
+// Each is independent
+println!("Base LR: {}", base_config.learning_rate);
+println!("Exp1 LR: {}", experiment1.learning_rate);
+println!("Exp2 layers: {:?}", experiment2.layers);
+```
+
+### Common Use Cases
+**General:**
+- Game character creation by copying templates and customizing attributes
+- Document generation from templates with specific data filled in
+- Test fixtures where base objects are cloned for each test
+
+**IoT/ML:**
+- Multiple sensor instances starting from one base configuration
+- ML experiments varying one hyperparameter while keeping others constant
+- Network packet generation from a template structure
+
+---
+
+## Singleton
+
+### Problem
+You need exactly one instance of a class shared across the entire system.
+> Multiple instances cause inconsistencies, resource conflicts, or waste. Like a government—a country needs one official government, not several competing ones.
+
+### Solution
+Make the class responsible for creating and managing its single instance.
+> Use a private constructor and static method to access the instance. The class controls when and how it's instantiated.
+
+### Code Examples
+
+#### Python
+```python
+class DatabaseConnection:
+    _instance = None
+    _initialized = False
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
+    def __init__(self):
+        # Only initialize once
+        if not DatabaseConnection._initialized:
+            self.host = "localhost"
+            self.port = 5432
+            self.connection = None
+            DatabaseConnection._initialized = True
+            print("Database connection created")
+    
+    def connect(self):
+        if not self.connection:
+            self.connection = f"Connected to {self.host}:{self.port}"
+        return self.connection
+    
+    def query(self, sql):
+        return f"Executing: {sql}"
+
+# Usage - always returns same instance
+db1 = DatabaseConnection()  # "Database connection created"
+db2 = DatabaseConnection()  # (no message - same instance)
+
+print(db1 is db2)  # True
+db1.host = "192.168.1.100"
+print(db2.host)    # "192.168.1.100" - same object
+```
+
+#### Rust
+```rust
+use std::sync::{Arc, Mutex, Once};
+
+struct DatabaseConnection {
+    host: String,
+    port: u16,
+    connection: Option<String>,
+}
+
+impl DatabaseConnection {
+    fn instance() -> Arc<Mutex<DatabaseConnection>> {
+        static mut INSTANCE: Option<Arc<Mutex<DatabaseConnection>>> = None;
+        static ONCE: Once = Once::new();
+        
+        unsafe {
+            ONCE.call_once(|| {
+                let connection = DatabaseConnection {
+                    host: "localhost".into(),
+                    port: 5432,
+                    connection: None,
+                };
+                INSTANCE = Some(Arc::new(Mutex::new(connection)));
+                println!("Database connection created");
+            });
+            INSTANCE.clone().unwrap()
+        }
+    }
+    
+    fn connect(&mut self) -> String {
+        if self.connection.is_none() {
+            self.connection = Some(format!("Connected to {}:{}", self.host, self.port));
+        }
+        self.connection.clone().unwrap()
+    }
+    
+    fn query(&self, sql: &str) -> String {
+        format!("Executing: {}", sql)
+    }
+}
+
+// Usage
+let db1 = DatabaseConnection::instance();
+let db2 = DatabaseConnection::instance();
+
+// Same instance (same Arc pointer)
+db1.lock().unwrap().host = "192.168.1.100".into();
+println!("{}", db2.lock().unwrap().host);  // "192.168.1.100"
+```
+
+### Common Use Cases
+**General:**
+- Application configuration ensuring one settings object across the system
+- Logging where all parts write to the same log
+- Cache management with a single shared storage
+
+**IoT/ML:**
+- Hardware bus controllers since only one process can control I2C or SPI at a time
+- Model registry providing centralized access to loaded models
+- Telemetry aggregation collecting metrics from all device components
+
+---
+
+## Quick Comparison
+
+| Pattern | Creates | When to Use |
+|---------|---------|-------------|
+| **Factory Method** | One type at a time | Type varies at runtime |
+| **Abstract Factory** | Related families | Need compatible sets |
+| **Builder** | Complex objects | Many optional parameters |
+| **Prototype** | By cloning | Creation is expensive |
+| **Singleton** | Exactly one | Need single shared instance |
+
+## Pattern Selection Guide
+
+**Choose based on your problem:**
+
+- Need one global instance? → **Singleton**
+- Creating from scratch is slow? → **Prototype**  
+- Many optional parameters? → **Builder**
+- Need compatible sets? → **Abstract Factory**
+- Type determined at runtime? → **Factory Method**
