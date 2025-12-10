@@ -1,5 +1,117 @@
 # Creational Design Patterns
 
+## Singleton
+
+### Problem
+You need exactly one instance of a class shared across the entire system.
+> Multiple instances cause inconsistencies, resource conflicts, or waste. Like a government—a country needs one official government, not several competing ones.
+
+### Solution
+Make the class responsible for creating and managing its single instance.
+> Use a private constructor and static method to access the instance. The class controls when and how it's instantiated.
+
+### Code Examples
+
+#### Python
+```python
+class DatabaseConnection:
+    _instance = None
+    _initialized = False
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
+    def __init__(self):
+        # Only initialize once
+        if not DatabaseConnection._initialized:
+            self.host = "localhost"
+            self.port = 5432
+            self.connection = None
+            DatabaseConnection._initialized = True
+            print("Database connection created")
+    
+    def connect(self):
+        if not self.connection:
+            self.connection = f"Connected to {self.host}:{self.port}"
+        return self.connection
+    
+    def query(self, sql):
+        return f"Executing: {sql}"
+
+# Usage - always returns same instance
+db1 = DatabaseConnection()  # "Database connection created"
+db2 = DatabaseConnection()  # (no message - same instance)
+
+print(db1 is db2)  # True
+db1.host = "192.168.1.100"
+print(db2.host)    # "192.168.1.100" - same object
+```
+
+#### Rust
+```rust
+use std::sync::{Arc, Mutex, Once};
+
+struct DatabaseConnection {
+    host: String,
+    port: u16,
+    connection: Option<String>,
+}
+
+impl DatabaseConnection {
+    fn instance() -> Arc<Mutex<DatabaseConnection>> {
+        static mut INSTANCE: Option<Arc<Mutex<DatabaseConnection>>> = None;
+        static ONCE: Once = Once::new();
+        
+        unsafe {
+            ONCE.call_once(|| {
+                let connection = DatabaseConnection {
+                    host: "localhost".into(),
+                    port: 5432,
+                    connection: None,
+                };
+                INSTANCE = Some(Arc::new(Mutex::new(connection)));
+                println!("Database connection created");
+            });
+            INSTANCE.clone().unwrap()
+        }
+    }
+    
+    fn connect(&mut self) -> String {
+        if self.connection.is_none() {
+            self.connection = Some(format!("Connected to {}:{}", self.host, self.port));
+        }
+        self.connection.clone().unwrap()
+    }
+    
+    fn query(&self, sql: &str) -> String {
+        format!("Executing: {}", sql)
+    }
+}
+
+// Usage
+let db1 = DatabaseConnection::instance();
+let db2 = DatabaseConnection::instance();
+
+// Same instance (same Arc pointer)
+db1.lock().unwrap().host = "192.168.1.100".into();
+println!("{}", db2.lock().unwrap().host);  // "192.168.1.100"
+```
+
+### Common Use Cases
+**General:**
+- Application configuration ensuring one settings object across the system
+- Logging where all parts write to the same log
+- Cache management with a single shared storage
+
+**IoT/ML:**
+- Hardware bus controllers since only one process can control I2C or SPI at a time
+- Model registry providing centralized access to loaded models
+- Telemetry aggregation collecting metrics from all device components
+
+---
+
 ## Factory Method
 
 ### Problem
@@ -563,118 +675,6 @@ println!("Exp2 layers: {:?}", experiment2.layers);
 - Multiple sensor instances starting from one base configuration
 - ML experiments varying one hyperparameter while keeping others constant
 - Network packet generation from a template structure
-
----
-
-## Singleton
-
-### Problem
-You need exactly one instance of a class shared across the entire system.
-> Multiple instances cause inconsistencies, resource conflicts, or waste. Like a government—a country needs one official government, not several competing ones.
-
-### Solution
-Make the class responsible for creating and managing its single instance.
-> Use a private constructor and static method to access the instance. The class controls when and how it's instantiated.
-
-### Code Examples
-
-#### Python
-```python
-class DatabaseConnection:
-    _instance = None
-    _initialized = False
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-    
-    def __init__(self):
-        # Only initialize once
-        if not DatabaseConnection._initialized:
-            self.host = "localhost"
-            self.port = 5432
-            self.connection = None
-            DatabaseConnection._initialized = True
-            print("Database connection created")
-    
-    def connect(self):
-        if not self.connection:
-            self.connection = f"Connected to {self.host}:{self.port}"
-        return self.connection
-    
-    def query(self, sql):
-        return f"Executing: {sql}"
-
-# Usage - always returns same instance
-db1 = DatabaseConnection()  # "Database connection created"
-db2 = DatabaseConnection()  # (no message - same instance)
-
-print(db1 is db2)  # True
-db1.host = "192.168.1.100"
-print(db2.host)    # "192.168.1.100" - same object
-```
-
-#### Rust
-```rust
-use std::sync::{Arc, Mutex, Once};
-
-struct DatabaseConnection {
-    host: String,
-    port: u16,
-    connection: Option<String>,
-}
-
-impl DatabaseConnection {
-    fn instance() -> Arc<Mutex<DatabaseConnection>> {
-        static mut INSTANCE: Option<Arc<Mutex<DatabaseConnection>>> = None;
-        static ONCE: Once = Once::new();
-        
-        unsafe {
-            ONCE.call_once(|| {
-                let connection = DatabaseConnection {
-                    host: "localhost".into(),
-                    port: 5432,
-                    connection: None,
-                };
-                INSTANCE = Some(Arc::new(Mutex::new(connection)));
-                println!("Database connection created");
-            });
-            INSTANCE.clone().unwrap()
-        }
-    }
-    
-    fn connect(&mut self) -> String {
-        if self.connection.is_none() {
-            self.connection = Some(format!("Connected to {}:{}", self.host, self.port));
-        }
-        self.connection.clone().unwrap()
-    }
-    
-    fn query(&self, sql: &str) -> String {
-        format!("Executing: {}", sql)
-    }
-}
-
-// Usage
-let db1 = DatabaseConnection::instance();
-let db2 = DatabaseConnection::instance();
-
-// Same instance (same Arc pointer)
-db1.lock().unwrap().host = "192.168.1.100".into();
-println!("{}", db2.lock().unwrap().host);  // "192.168.1.100"
-```
-
-### Common Use Cases
-**General:**
-- Application configuration ensuring one settings object across the system
-- Logging where all parts write to the same log
-- Cache management with a single shared storage
-
-**IoT/ML:**
-- Hardware bus controllers since only one process can control I2C or SPI at a time
-- Model registry providing centralized access to loaded models
-- Telemetry aggregation collecting metrics from all device components
 
 ---
 
