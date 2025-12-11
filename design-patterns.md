@@ -1310,14 +1310,568 @@ println!("{}", proxy.read());
 
 ---
 
-## Quick Comparison
+# Behavioral Design Patterns - Quick Notes
 
-| Pattern | Purpose | Key Benefit |
-|---------|---------|-------------|
-| **Adapter** | Make incompatible interfaces work | Integration with existing code |
-| **Bridge** | Decouple abstraction from implementation | Independent variation |
-| **Composite** | Treat objects and compositions uniformly | Hierarchical structures |
-| **Decorator** | Add responsibilities dynamically | Flexible feature addition |
-| **Facade** | Simplify complex subsystem | Easier API |
-| **Flyweight** | Share common data efficiently | Memory optimization |
-| **Proxy** | Control access to objects | Lazy loading, access control |
+## Chain of Responsibility
+**Problem:** Pass request through handler chain until one handles it
+> Like tech support—Level 1 → Level 2 → Level 3, each decides to handle or escalate
+
+**Solution:** Link handlers together, each can process or pass to next
+> Each handler has reference to next handler. If can't handle, forwards to next. Decouples sender from receiver—sender doesn't know who will handle it.
+
+```python
+class Handler:
+    def __init__(self):
+        self.next = None
+    
+    def set_next(self, handler):
+        self.next = handler
+        return handler
+    
+    def handle(self, request):
+        if self.next:
+            return self.next.handle(request)
+
+class ValidationHandler(Handler):
+    def handle(self, data):
+        if not data:
+            return "Invalid"
+        print("Validated")
+        return super().handle(data)
+
+class FilterHandler(Handler):
+    def handle(self, data):
+        filtered = data.strip()
+        print("Filtered")
+        return super().handle(filtered)
+
+# Usage
+validator = ValidationHandler()
+filter_h = FilterHandler()
+validator.set_next(filter_h)
+validator.handle("  data  ")
+```
+
+**Usage:**
+- **Request pipelines**: HTTP middleware where each layer processes (auth → logging → routing)
+- **Event handling**: GUI events bubble up until a handler catches it
+- **Middleware chains**: Express.js style request processing
+
+**IoT:**
+- **Sensor validation**: Raw data → Range check → Calibration → Smoothing filter
+- **Packet processing**: Receive → CRC check → Parse → Route → Execute
+- **Error cascades**: Try serial → Try WiFi → Try cellular → Give up
+
+---
+
+## Command
+**Problem:** Encapsulate requests as objects for queuing, logging, or undo
+> Like restaurant orders—order slip is command object, can be queued, logged, or cancelled
+
+**Solution:** Wrap requests in command objects with execute() method
+> Separates "what to do" from "when/how to do it". Command stores receiver and action. Invoker just calls execute() without knowing details.
+
+```python
+class Command:
+    def execute(self): pass
+
+class Sensor:
+    def start(self): return "Started"
+    def stop(self): return "Stopped"
+
+class StartCommand(Command):
+    def __init__(self, sensor):
+        self.sensor = sensor
+    
+    def execute(self):
+        return self.sensor.start()
+
+class StopCommand(Command):
+    def __init__(self, sensor):
+        self.sensor = sensor
+    
+    def execute(self):
+        return self.sensor.stop()
+
+# Invoker
+class RemoteControl:
+    def __init__(self):
+        self.commands = []
+    
+    def add(self, cmd):
+        self.commands.append(cmd)
+    
+    def execute_all(self):
+        for cmd in self.commands:
+            cmd.execute()
+
+# Usage
+sensor = Sensor()
+remote = RemoteControl()
+remote.add(StartCommand(sensor))
+remote.add(StopCommand(sensor))
+remote.execute_all()
+```
+
+**Usage:**
+- **Undo/redo**: Each command knows how to undo itself (text editors, photo editors)
+- **Transactions**: Group commands, execute atomically, rollback on failure
+- **Job queues**: Commands stored in queue, workers execute later
+
+**IoT:**
+- **Device control**: Queue commands like "turn on LED", "read sensor", execute in order
+- **Scheduled operations**: Store commands with timestamps, execute at specific times
+- **Batch tasks**: Group multiple sensor reads into single command batch
+
+---
+
+## Iterator
+**Problem:** Access collection elements sequentially without exposing structure
+> Like TV remote—iterate channels without knowing how list is stored
+
+**Solution:** Provide iterator that maintains position and traverses collection
+> Iterator hides collection's internal structure (array, linked list, tree). Client uses uniform next() interface regardless of underlying storage.
+
+```python
+class SensorReadings:
+    def __init__(self):
+        self.readings = []
+    
+    def add(self, reading):
+        self.readings.append(reading)
+    
+    def __iter__(self):
+        return SensorIterator(self.readings)
+
+class SensorIterator:
+    def __init__(self, readings):
+        self.readings = readings
+        self.index = 0
+    
+    def __iter__(self):
+        return self
+    
+    def __next__(self):
+        if self.index < len(self.readings):
+            result = self.readings[self.index]
+            self.index += 1
+            return result
+        raise StopIteration
+
+# Usage
+readings = SensorReadings()
+readings.add(25.0)
+readings.add(26.5)
+for temp in readings:
+    print(temp)
+```
+
+**Usage:**
+- **Collection traversal**: Iterate arrays, trees, graphs with same interface
+- **Custom iteration**: Traverse in specific order (reverse, filtered, sorted)
+- **Data structure abstraction**: Change internal structure without breaking client code
+
+**IoT:**
+- **Sensor buffers**: Iterate through circular buffer of recent readings
+- **Device lists**: Traverse registered devices without exposing storage
+- **Circular buffers**: Read oldest-to-newest in ring buffer
+
+---
+
+## Mediator
+**Problem:** Reduce chaotic dependencies by centralizing communication
+> Like air traffic control—all planes talk through tower, not each other
+
+**Solution:** Objects communicate through mediator instead of directly
+> Mediator encapsulates how objects interact. Objects only know mediator, not each other. Reduces coupling from N×N to N×1.
+
+```python
+class SensorMediator:
+    def __init__(self):
+        self.sensors = []
+    
+    def register(self, sensor):
+        self.sensors.append(sensor)
+        sensor.mediator = self
+    
+    def notify(self, sender, event):
+        if event == "high_temp":
+            for s in self.sensors:
+                if s != sender:
+                    s.receive(f"Alert from {sender.name}")
+
+class Sensor:
+    def __init__(self, name):
+        self.name = name
+        self.mediator = None
+    
+    def check(self, temp):
+        if temp > 30:
+            self.mediator.notify(self, "high_temp")
+    
+    def receive(self, msg):
+        print(f"{self.name}: {msg}")
+
+# Usage
+mediator = SensorMediator()
+temp1 = Sensor("Sensor1")
+temp2 = Sensor("Sensor2")
+mediator.register(temp1)
+mediator.register(temp2)
+temp1.check(35)  # Sensor2 gets notified
+```
+
+**Usage:**
+- **GUI dialogs**: Buttons, text fields coordinate through dialog controller
+- **Chat rooms**: Users send messages through room, room broadcasts
+- **Component coordination**: Multiple UI components update based on others' changes
+
+**IoT:**
+- **Sensor coordination**: Temperature spike triggers fan, alerts display, logs event
+- **Device orchestration**: Master device coordinates multiple slaves' behavior
+- **Event distribution**: Central hub routes events to appropriate handlers
+
+---
+
+## Memento
+**Problem:** Save and restore object state without breaking encapsulation
+> Like game save points—captures exact state for later restoration
+
+**Solution:** Memento stores state, Originator creates/restores, Caretaker manages
+> Memento is opaque—only Originator can read it. Caretaker stores mementos without peeking inside. Preserves encapsulation.
+
+```python
+class SensorMemento:
+    def __init__(self, state):
+        self._state = state
+    
+    def get_state(self):
+        return self._state
+
+class Sensor:
+    def __init__(self):
+        self.readings = []
+    
+    def add(self, value):
+        self.readings.append(value)
+    
+    def save(self):
+        return SensorMemento(self.readings.copy())
+    
+    def restore(self, memento):
+        self.readings = memento.get_state()
+
+class History:
+    def __init__(self):
+        self.mementos = []
+    
+    def save(self, memento):
+        self.mementos.append(memento)
+    
+    def undo(self):
+        if self.mementos:
+            return self.mementos.pop()
+
+# Usage
+sensor = Sensor()
+history = History()
+
+sensor.add(25.0)
+history.save(sensor.save())  # Checkpoint
+
+sensor.add(26.0)
+sensor.add(27.0)
+
+print(sensor.readings)  # [25.0, 26.0, 27.0]
+sensor.restore(history.undo())
+print(sensor.readings)  # [25.0]
+```
+
+**Usage:**
+- **Undo/redo**: Save states before each operation, restore on undo
+- **Transaction rollback**: Save state before transaction, restore on failure
+- **Snapshot management**: Periodic snapshots for recovery
+
+**IoT:**
+- **Config snapshots**: Save working config, try new settings, rollback if issues
+- **Sensor checkpoints**: Save sensor state, restore if calibration fails
+- **System recovery**: Periodic state saves for crash recovery
+
+---
+
+## Observer
+**Problem:** Notify multiple objects when another object changes
+> Like YouTube subscriptions—when video uploads, all subscribers notified
+
+**Solution:** Subject maintains observers list, notifies all on state change
+> Defines one-to-many dependency. Observers register with subject. When subject changes, it calls notify() on all observers automatically.
+
+```python
+class Subject:
+    def __init__(self):
+        self._observers = []
+        self._state = None
+    
+    def attach(self, observer):
+        self._observers.append(observer)
+    
+    def set_state(self, state):
+        self._state = state
+        self.notify()
+    
+    def notify(self):
+        for obs in self._observers:
+            obs.update(self._state)
+
+class Display:
+    def __init__(self, name):
+        self.name = name
+    
+    def update(self, state):
+        print(f"{self.name}: {state}")
+
+# Usage
+sensor = Subject()
+display1 = Display("LCD")
+display2 = Display("Log")
+
+sensor.attach(display1)
+sensor.attach(display2)
+
+sensor.set_state("Temp: 25°C")
+# Both displays update automatically
+```
+
+**Usage:**
+- **Event systems**: DOM events, button clicks notify registered listeners
+- **Model-View**: Model changes, all views update automatically (MVC pattern)
+- **Pub/sub**: Publishers broadcast, subscribers receive without direct coupling
+
+**IoT:**
+- **Sensor broadcasting**: Temperature sensor updates display, logger, cloud uploader
+- **Device monitoring**: Monitor device state, notify dashboard, alerting system
+- **Alert systems**: Critical event triggers multiple notification channels
+
+---
+
+## State
+**Problem:** Object behavior changes with internal state
+> Like TCP connection—behaves differently when Listening, Established, or Closed
+
+**Solution:** Encapsulate state-specific behavior in state objects
+> Each state is a class. Context delegates to current state object. Changing state = changing the state object. Eliminates huge if/else blocks.
+
+```python
+class State:
+    def handle(self): pass
+
+class IdleState(State):
+    def handle(self):
+        return "Sensor idle"
+
+class ReadingState(State):
+    def handle(self):
+        return "Sensor reading"
+
+class ErrorState(State):
+    def handle(self):
+        return "Sensor error"
+
+class Sensor:
+    def __init__(self):
+        self.state = IdleState()
+    
+    def set_state(self, state):
+        self.state = state
+    
+    def request(self):
+        return self.state.handle()
+
+# Usage
+sensor = Sensor()
+print(sensor.request())  # Sensor idle
+
+sensor.set_state(ReadingState())
+print(sensor.request())  # Sensor reading
+
+sensor.set_state(ErrorState())
+print(sensor.request())  # Sensor error
+```
+
+**Usage:**
+- **Workflow engines**: Document states (Draft → Review → Approved → Published)
+- **Connection management**: Network states (Connecting → Connected → Disconnected)
+- **UI state machines**: App states (Loading → Ready → Processing → Error)
+
+**IoT:**
+- **Device lifecycle**: Boot → Initializing → Ready → Operating → Sleeping → Shutdown
+- **Protocol states**: Modbus (Idle → Sending → Waiting Response → Processing → Error)
+- **Sensor modes**: Continuous → OnDemand → PowerSave → Calibration
+
+---
+
+## Strategy
+**Problem:** Define interchangeable algorithm families
+> Like navigation—choose fastest, shortest, or avoid highways
+
+**Solution:** Encapsulate algorithms, make them interchangeable
+> Algorithm interface defines contract. Concrete strategies implement variations. Context uses strategy interface, switches at runtime.
+
+```python
+class CompressionStrategy:
+    def compress(self, data): pass
+
+class ZipCompression(CompressionStrategy):
+    def compress(self, data):
+        return f"ZIP: {data}"
+
+class GzipCompression(CompressionStrategy):
+    def compress(self, data):
+        return f"GZIP: {data}"
+
+class DataTransmitter:
+    def __init__(self, strategy):
+        self.strategy = strategy
+    
+    def send(self, data):
+        compressed = self.strategy.compress(data)
+        return f"Sending {compressed}"
+
+# Usage
+tx = DataTransmitter(ZipCompression())
+print(tx.send("sensor data"))
+
+tx.strategy = GzipCompression()  # Switch algorithm
+print(tx.send("sensor data"))
+```
+
+**Usage:**
+- **Sorting algorithms**: Choose QuickSort, MergeSort, HeapSort based on data
+- **Payment methods**: Credit card, PayPal, crypto—same checkout, different processing
+- **Validation rules**: Different validation strategies per field type
+
+**IoT:**
+- **Compression methods**: ZIP for text data, JPEG for images, choose based on type
+- **Encryption algorithms**: AES, RSA—choose based on security requirements
+- **Calibration strategies**: Linear, polynomial—choose based on sensor type
+
+---
+
+## Template Method
+**Problem:** Define algorithm skeleton, let subclasses override steps
+> Like making coffee—process is same (boil, brew, pour, add), but brewing differs
+
+**Solution:** Base class defines structure, subclasses override hook methods
+> Template method calls abstract methods (hooks). Subclasses implement hooks. Algorithm structure stays in base class—prevents duplication.
+
+```python
+class DataProcessor:
+    def process(self):  # Template method
+        data = self.read_data()
+        data = self.transform(data)
+        self.send(data)
+    
+    def read_data(self): pass  # Hook
+    def transform(self, data): pass  # Hook
+    
+    def send(self, data):  # Concrete
+        print(f"Sending: {data}")
+
+class SensorProcessor(DataProcessor):
+    def read_data(self):
+        return "sensor reading"
+    
+    def transform(self, data):
+        return data.upper()
+
+class FileProcessor(DataProcessor):
+    def read_data(self):
+        return "file content"
+    
+    def transform(self, data):
+        return data.lower()
+
+# Usage
+proc = SensorProcessor()
+proc.process()  # Read, transform, send
+
+proc = FileProcessor()
+proc.process()  # Different read/transform, same flow
+```
+
+**Usage:**
+- **Framework workflows**: Django views (setup → process → render → cleanup)
+- **Data pipelines**: ETL (extract → transform → load), transform differs
+- **Test fixtures**: setUp → test → tearDown, test body varies
+
+**IoT:**
+- **Sensor protocols**: Initialize → Read → Validate → Store, read step varies
+- **Transmission flows**: Connect → Authenticate → Send → Disconnect, auth differs
+- **Initialization**: Power on → Configure → Calibrate → Ready, configure varies
+
+---
+
+## Visitor
+**Problem:** Add operations to class hierarchy without modifying classes
+> Like tax calculation—different items taxed differently, without changing item classes
+
+**Solution:** Represent operations as visitor objects, elements accept visitors
+> Double dispatch: element.accept(visitor) calls visitor.visit(element). New operation = new visitor class. Elements unchanged.
+
+```python
+class Sensor:
+    def accept(self, visitor): pass
+
+class TempSensor(Sensor):
+    def __init__(self, value):
+        self.value = value
+    
+    def accept(self, visitor):
+        return visitor.visit_temp(self)
+
+class HumiditySensor(Sensor):
+    def __init__(self, value):
+        self.value = value
+    
+    def accept(self, visitor):
+        return visitor.visit_humidity(self)
+
+class Visitor:
+    def visit_temp(self, sensor): pass
+    def visit_humidity(self, sensor): pass
+
+class DisplayVisitor(Visitor):
+    def visit_temp(self, s):
+        return f"Temp: {s.value}°C"
+    
+    def visit_humidity(self, s):
+        return f"Humidity: {s.value}%"
+
+class ExportVisitor(Visitor):
+    def visit_temp(self, s):
+        return f"temp,{s.value}"
+    
+    def visit_humidity(self, s):
+        return f"humidity,{s.value}"
+
+# Usage
+sensors = [TempSensor(25), HumiditySensor(60)]
+
+display = DisplayVisitor()
+for s in sensors:
+    print(s.accept(display))
+
+export = ExportVisitor()
+for s in sensors:
+    print(s.accept(export))
+```
+
+**Usage:**
+- **AST traversal**: Compiler visits syntax tree nodes, performs operations
+- **Report generation**: Visit different data types, format each for report
+- **Serialization**: Visit objects, serialize each to JSON/XML/Binary
+
+**IoT:**
+- **Multi-format export**: Visit sensors, export as JSON, CSV, Protobuf
+- **Data aggregation**: Visit sensor network, calculate stats per type
+- **Device inventory**: Visit devices, collect info for different reports
