@@ -717,263 +717,223 @@ print(proxy.read())  # Uses existing connection
 - Resource-intensive device initialization
 
 ---
-
-# BEHAVIORAL DESIGN PATTERNS – Industry Reality (Pareto 80/20)
+# BEHAVIORAL PATTERNS
 
 ## Strategy
 
-### Problem
-You need to change an object’s behavior/algorithm at runtime without changing its class or polluting it with conditionals.  
-> Adding a new payment method, compression algorithm, or ML inference backend should not require modifying existing classes.  
-> Like a GPS app: same route, but you can switch between “fastest”, “shortest”, or “eco” mode anytime.
+### Problem  
+You have one piece of code that needs to do the same job in different ways depending on the situation, and you want to be able to switch the way instantly — even while the program is running.  
+> Example: the same shopping cart must calculate shipping as “ground”, “air”, or “express” and the customer can change their mind right before paying.
 
-### Solution
-Define a family of algorithms, encapsulate each one in its own class, and make them interchangeable at runtime.  
-> Context holds a reference to a strategy object and delegates the varying part to it.  
-> New strategies can be added without touching existing code (Open/Closed Principle).
+### Solution  
+Create a separate small class for each way of doing the job. The main class only keeps a reference to “the current way” and asks it to do the work. You can replace that reference anytime.
 
 ```python
-from abc import ABC, abstractmethod
+class ShippingMethod:
+    def cost(self, weight): ...
 
-class InferenceStrategy(ABC):
-    @abstractmethod
-    def run(self, input_data): ...
+class Ground(ShippingMethod):
+    def cost(self, weight): return weight * 2
 
-class CpuInference(InferenceStrategy):
-    def run(self, input_data): return "Running on CPU"
+class Air(ShippingMethod):
+    def cost(self, weight): return weight * 10 + 50
 
-class GpuInference(InferenceStrategy):
-    def run(self, input_data): return "Running on GPU (TensorRT)"
-
-class EdgeInference(InferenceStrategy):
-    def run(self, input_data): return "Running on MCU (TFLite Micro)"
-
-class Model:
-    def __init__(self, strategy: InferenceStrategy):
-        self.strategy = strategy
+class ShoppingCart:
+    def __init__(self, method: ShippingMethod):
+        self.method = method                     # holds the current strategy
     
-    def set_strategy(self, strategy: InferenceStrategy):
-        self.strategy = strategy
+    def switch_to(self, new_method: ShippingMethod):
+        self.method = new_method                 # change behavior at any time
     
-    def predict(self, data):
-        return self.strategy.run(data)
+    def total(self, weight):
+        return 100 + self.method.cost(weight)
 
-# Usage – same model, different backends
-model = Model(CpuInference())
-print(model.predict(None))           # Running on CPU
-model.set_strategy(EdgeInference())
-print(model.predict(None))           # Running on MCU (TFLite Micro)
+# Usage – switch whenever you want
+cart = ShoppingCart(Ground())
+print(cart.total(10))           # 120
+cart.switch_to(Air())
+print(cart.total(10))           # 250
 ```
 
-### Usage (real industry 80/20)
-**General:**  
-- Payment processors  
-- Sorting/compression algorithms  
-- Validation rules  
-**IoT/Embedded:**  
-- Modbus transport (RTU vs TCP vs ASCII)  
-- Sensor fusion algorithms  
-- Power management policies
+### Usage (you’ll see this every week)
+- Payment methods (card / PayPal / crypto)  
+- Modbus RTU vs TCP vs BLE  
+- Choosing CPU / GPU / TinyML inference
 
 ---
 
-## Observer (Pub/Sub / Event Bus)
+## Observer (Pub/Sub)
 
-### Problem
-An object must notify multiple dependent objects when its state changes, without hard-coding who they are.  
-> Tight coupling makes it impossible to add or remove listeners later.  
-> Like a stock price: many charts, phones, and trading bots need to react instantly.
+### Problem  
+When one object changes (e.g. a sensor gets a new reading), many other objects (display, cloud, alarm, logger) need to react immediately, but you don’t want them glued together forever.  
+> Example: a fire alarm goes off → every siren, phone, and sprinkler must react at once.
 
-### Solution
-Define a subscription mechanism: subject maintains a list of observers and notifies them automatically.
+### Solution  
+Let objects register (“subscribe”) with the source. Whenever the source changes, it calls a method on every registered object automatically.
 
 ```python
-class TemperatureSensor:
+class Sensor:
     def __init__(self):
-        self._observers = []
-        self._temp = 0.0
+        self._listeners = []          # list of subscribers
+        self._value = None
     
-    def attach(self, observer):
-        self._observers.append(observer)
+    def subscribe(self, listener):
+        self._listeners.append(listener)   # add new listener
     
     @property
-    def temperature(self):
-        return self._temp
-    @temperature.setter
-    def temperature(self, value):
-        self._temp = value
-        for observer in self._observers:
-            observer.update(value)
+    def value(self):
+        return self._value
+    @value.setter
+    def value(self, new_value):
+        self._value = new_value
+        for listener in self._listeners:
+            listener.update(new_value)         # notify everyone
 
-class CloudUploader:
-    def update(self, temp): print(f"Uploaded to cloud: {temp}°C")
+def show_on_screen(temp):
+    print(f"Screen shows: {temp}°C")
 
-class LocalDisplay:
-    def update(self, temp): print(f"Screen: {temp:.1f}°C")
+def upload_to_cloud(temp):
+    print(f"Cloud received: {temp}°C")
 
 # Usage
-sensor = TemperatureSensor()
-sensor.attach(CloudUploader())
-sensor.attach(LocalDisplay())
-sensor.temperature = 23.7
-# → both observer methods called automatically
+temp_sensor = Sensor()
+temp_sensor.subscribe(show_on_screen)
+temp_sensor.subscribe(upload_to_cloud)
+temp_sensor.value = 26.3   # both functions run instantly
 ```
 
-### Usage (real industry 80/20)
-**General:**  
-- GUI frameworks  
-- Event-driven systems  
-**IoT/Embedded:**  
-- MQTT on_message callbacks  
-- Sensor → dashboard → logger pipelines  
-- BLE characteristic notifications
+### Usage
+- Sensor → dashboard / cloud / buzzer  
+- MQTT message callbacks  
+- Button clicks in apps
 
 ---
 
 ## Decorator (Wrapper)
 
-### Problem
-You want to add behavior (logging, retry, caching, metrics) to existing objects dynamically and in any combination.  
-> Subclassing explodes (Logged + Cached + Retried = 8 classes).  
-> Like coffee: you start with espresso, then add milk, sugar, whip — same base, layered features.
+### Problem  
+You want to add helpful extras (logging, automatic retry, caching, authentication) to an existing object, and you want any combination of those extras without creating dozens of new classes.  
+> Example: you want a Modbus client that can retry, log every call, and measure time — and you want to turn each feature on or off independently.
 
-### Solution
-Create decorator classes that wrap the original component and add behavior before/after delegating.
+### Solution  
+Create tiny wrapper classes. Each wrapper holds the original object and adds one extra feature. You can stack them like layers of an onion.
 
 ```python
-class ModbusClient:
-    def read_holding(self, addr, count=1):
-        print(f"Raw read {addr}")
-        return [42] * count
+class ModbusDevice:
+    def read(self, addr):
+        print(f"Reading register {addr}")
+        return 999
 
-class RetryDecorator:
-    def __init__(self, client): self.client = client
-    def read_holding(self, addr, count=1):
+class RetryWrapper:
+    def __init__(self, device): self.device = device
+    def read(self, addr):
         for i in range(3):
             try:
-                return self.client.read_holding(addr, count)
-            except Exception:
+                return self.device.read(addr)
+            except:
                 if i == 2: raise
-                print(f"Retry {i+1}/3")
+                print("Retrying...")
 
-class LoggingDecorator:
-    def __init__(self, client): self.client = client
-    def read_holding(self, addr, count=1):
-        print(f"→ read_holding({addr}, {count})")
-        result = self.client.read_holding(addr, count)
-        print(f"← {result}")
+class LogWrapper:
+    def __init__(self, device): self.device = device
+    def read(self, addr):
+        print(f"→ Calling read({addr})")
+        result = self.device.read(addr)
+        print(f"← Got {result}")
         return result
 
-# Stack them freely
-client = LoggingDecorator(RetryDecorator(ModbusClient()))
-client.read_holding(40001, 5)
+# Stack in any order you like
+device = LogWrapper(RetryWrapper(ModbusDevice()))
+device.read(40001)
 ```
 
-### Usage (real industry 80/20)
-**General:**  
-- Middleware stacks (Flask, Django)  
-- Logging, metrics, caching  
-**IoT/Embedded:**  
-- Modbus/TCP retry + timeout + logging  
-- BLE connection with reconnection wrapper
+### Usage
+- Automatic retry + logging for network calls  
+- Adding metrics or caching to any function  
+- Web middleware stacks
 
 ---
 
 ## Command
 
-### Problem
-You need to parameterize objects with actions, queue them, support undo, or transmit them over network.  
-> GUI buttons, remote controls, and job queues all represent “do something later”.
+### Problem  
+You need to represent “do this action” as something you can save, delay, queue, undo, or send over the network.  
+> Example: every button on a smart-home remote must remember exactly what it should do when pressed.
 
-### Solution
-Turn a request into a standalone object containing everything needed to execute it.
+### Solution  
+Turn each action into its own tiny object that knows everything needed to perform it.
 
 ```python
-class Switch:
-    def on(self):  print("Device ON")
-    def off(self): print("Device OFF")
+class Light:
+    def turn_on(self):  print("Light is ON")
+    def turn_off(self): print("Light is OFF")
 
 class Command:
     def execute(self): ...
 
 class TurnOn(Command):
-    def __init__(self, switch, state):
-        self.switch = switch
-        self.state = state
-    def execute(self):
-        if self.state: self.switch.on()
-        else: self.switch.off()
+    def __init__(self, light): self.light = light
+    def execute(self): self.light.turn_on()
 
-class RemoteControl:
-    def __init__(self):
-        self.commands = [None] * 7
-    def set_command(self, slot, cmd):
-        self.commands[slot] = cmd
-    def press(self, slot):
-        if self.commands[slot]:
-            self.commands[slot].execute()
+class TurnOff(Command):
+    def __init__(self, light): self.light = light
+    def execute(self): self.light.turn_off()
+
+class RemoteButton:
+    def __init__(self): self.command = None
+    def set_command(self, cmd): self.command = cmd
+    def press(self):
+        if self.command: self.command.execute()
 
 # Usage
-device = Switch()
-remote = RemoteControl()
-remote.set_command(0, TurnOn(device, True))
-remote.set_command(1, TurnOn(device, False))
-remote.press(0)   # Device ON
-remote.press(1)   # Device OFF
+light = Light()
+button = RemoteButton()
+button.set_command(TurnOn(light))
+button.press()   # Light is ON
+button.set_command(TurnOff(light))
+button.press()   # Light is OFF
 ```
 
-### Usage (real industry 80/20)
-**General:**  
+### Usage
+- Physical or touchscreen remote controls  
 - Undo/redo in editors  
-- Macro recording  
-**IoT/Embedded:**  
-- Remote control panels  
-- Queued device commands (safe shutdown sequences)
+- Queuing commands when device is offline
 
 ---
 
 ## Template Method
 
-### Problem
-You have a multi-step algorithm where most steps are identical, but a few vary between implementations.  
-> Copy-pasting the whole algorithm for tiny differences is error-prone and hard to maintain.
+### Problem  
+You have a process that always follows the same big steps, but a few of those steps are done differently depending on the device or file type.  
+> Example: every firmware update does connect → erase → write → verify → reboot, but the erase and write steps are different for each chip family.
 
-### Solution
-Define the algorithm skeleton in a base class; make varying steps abstract or hooks that subclasses override.
+### Solution  
+Write the fixed steps once in a parent class. Leave the steps that change as empty methods that each child class must fill in.
 
 ```python
-from abc import ABC, abstractmethod
-
-class FirmwareUpdate(ABC):
-    def perform_update(self):
+class FirmwareFlasher:
+    def flash(self):
         self.connect()
-        self.erase_flash()
-        self.write_firmware()
+        self.erase()
+        self.write()
         self.verify()
         self.reboot()
-        print("Update completed")
-    
-    def connect(self): print("Connected via bootloader")
-    def reboot(self):  print("Device rebooted")
-    
-    @abstractmethod
-    def erase_flash(self): ...
-    @abstractmethod
-    def write_firmware(self): ...
-    @abstractmethod
-    def verify(self): ...
+        print("Flash complete")
 
-class Stm32Update(FirmwareUpdate):
-    def erase_flash(self): print("STM32: mass erase")
-    def write_firmware(self): print("STM32: page write")
-    def verify(self): print("STM32: CRC check")
+    def connect(self): print("Connected to bootloader")
+    def reboot(self):  print("Device restarted")
+    
+    def erase(self):   ...  # child must implement
+    def write(self):   ...
+    def verify(self):  ...
+
+class Nrf52Flasher(FirmwareFlasher):
+    def erase(self):   print("Erasing all flash")
+    def write(self):   print("Writing via nRF Connect")
+    def verify(self):  print("CRC check OK")
 ```
 
-### Usage (real industry 80/20)
-**General:**  
-- Test frameworks (setup → test → teardown)  
-**IoT/Embedded:**  
-- Device provisioning flows  
-- Communication protocol handlers (common framing, different payloads)
----
-
+### Usage
+- Device flashing / provisioning  
+- Data import/export (CSV / JSON / XML)  
+- Test case base class (setup → run → cleanup)
